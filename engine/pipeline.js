@@ -12,8 +12,10 @@ const { determineStep, getCoachLines, TIMING } = require('./scriptLibrary');
 async function generatePersonaResponse(anthropic, persona, state, latentVars, messages, scenario, exchangeNumber) {
   const systemPrompt = buildSystemPrompt(persona, state, latentVars, scenario, exchangeNumber);
 
+  // Only send last 10 messages to Claude to keep context manageable
   const formattedMessages = messages
     .filter((m) => m.role === 'user' || m.role === 'assistant')
+    .slice(-10)
     .map((m) => ({ role: m.role, content: m.content }));
 
   let bestAttempt = '';
@@ -54,10 +56,16 @@ async function runPipeline(userMessage, messages, engineState, persona, scenario
 
   let herResponse = '';
   if (engineState.currentState !== 'EXITED') {
-    herResponse = await generatePersonaResponse(
-      anthropic, persona, engineState.currentState, engineState.latentVars,
-      updatedMessages, scenario, engineState.exchangeNumber
-    );
+    try {
+      herResponse = await generatePersonaResponse(
+        anthropic, persona, engineState.currentState, engineState.latentVars,
+        updatedMessages, scenario, engineState.exchangeNumber
+      );
+    } catch (err) {
+      console.error('[Pipeline] Persona response failed:', err.message);
+      // Fallback — keep the conversation going
+      herResponse = "Sorry, what was that?";
+    }
   }
 
   // 2. Progress the state naturally based on exchange number + difficulty
