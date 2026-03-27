@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@11labs/client@latest/dist/bundle.min.js"></script>
 </head>
 <body>
   <div id="app">
@@ -98,15 +99,9 @@
         </div>
       </div>
 
-      <!-- Mic button + text fallback -->
+      <!-- Voice controls — ElevenLabs handles mic/audio, we just need start/stop -->
       <div class="voice-controls">
-        <div class="text-fallback">
-          <input type="text" id="chat-input" placeholder="Or type here..." autocomplete="off">
-          <button id="send-btn" class="send-btn-small">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>
-          </button>
-        </div>
-        <button id="mic-btn" class="mic-btn" aria-label="Hold to speak">
+        <button id="mic-btn" class="mic-btn" aria-label="Start conversation">
           <svg id="mic-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
             <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>

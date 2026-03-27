@@ -1,18 +1,15 @@
-// ═══ APPROACH — Voice Chat Client ═══
+// ═══ APPROACH — Voice Chat Client (ElevenLabs Conversational AI) ═══
 
 let currentSession = null;
 let selectedScenario = null;
 let selectedDifficulty = null;
 
-// Voice state
-let ws = null;
-let audioContext = null;
-let mediaStream = null;
-let scriptProcessor = null;
-let isRecording = false;
-let isProcessing = false;
-let audioQueue = []; // Queue of base64 audio to play sequentially
-let isPlayingAudio = false;
+// ElevenLabs conversation instance
+let conversation = null;
+let isConversationActive = false;
+
+// Our WebSocket for coach push + state updates
+let coachWs = null;
 
 // ── View Switching ──────────────────────────────────────────────
 
@@ -141,7 +138,7 @@ async function startSession() {
   }
 }
 
-// ── Voice Chat ──────────────────────────────────────────────────
+// ── Voice Chat (ElevenLabs Conversational AI) ───────────────────
 
 function openVoiceChat(session) {
   // Set header
@@ -153,10 +150,12 @@ function openVoiceChat(session) {
   document.getElementById('scene-setter').textContent = session.sceneDescription;
 
   // Reset UI
-  setVoiceStatus('Tap mic to start');
+  setVoiceStatus('Tap mic to start conversation');
   document.getElementById('her-response-area').classList.add('hidden');
   document.getElementById('live-transcript').classList.add('hidden');
   document.getElementById('coach-panel').classList.add('hidden');
+  document.getElementById('mic-btn').classList.remove('recording');
+  document.getElementById('mic-btn').disabled = false;
 
   // Openers
   const openersPanel = document.getElementById('openers-panel');
@@ -168,95 +167,159 @@ function openVoiceChat(session) {
       const chip = document.createElement('button');
       chip.className = 'opener-chip';
       chip.textContent = opener;
-      chip.addEventListener('click', () => {
-        // Put in text input as fallback
-        document.getElementById('chat-input').value = opener;
-      });
       openersList.appendChild(chip);
     });
   }
 
-  // Connect WebSocket
-  connectWebSocket(session.sessionId);
+  // Connect our WebSocket for coach push
+  connectCoachWebSocket(session.sessionId);
 
   switchView('chat');
 }
 
-function connectWebSocket(sessionId) {
-  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  ws = new WebSocket(`${protocol}//${location.host}`);
+// ── Coach WebSocket (our server → browser for suggestions + state) ──
 
-  ws.onopen = () => {
-    console.log('[WS] Connected');
-    // Start voice session
-    ws.send(JSON.stringify({ type: 'voice.start', sessionId }));
+function connectCoachWebSocket(sessionId) {
+  if (coachWs) { coachWs.close(); coachWs = null; }
+
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  coachWs = new WebSocket(`${protocol}//${location.host}`);
+
+  coachWs.onopen = () => {
+    console.log('[Coach WS] Connected');
+    coachWs.send(JSON.stringify({ type: 'session.bind', sessionId }));
   };
 
-  ws.onmessage = (event) => {
+  coachWs.onmessage = (event) => {
     let msg;
     try { msg = JSON.parse(event.data); } catch { return; }
 
     switch (msg.type) {
-      case 'voice.ready':
-        setVoiceStatus('Ready — tap mic to speak');
-        document.getElementById('mic-btn').disabled = false;
-        break;
-
-      case 'transcript.interim':
-        showTranscript(msg.text, msg.isFinal);
-        break;
-
-      case 'transcript.final':
-        showTranscript(msg.text, true);
-        setVoiceStatus('Processing...');
-        break;
-
-      case 'pipeline.started':
-        isProcessing = true;
-        setVoiceStatus('Thinking...', 'processing');
-        break;
-
-      case 'response.text':
-        isProcessing = false;
-        showHerResponse(msg.herResponse);
-        showCoachSuggestions(msg.coachSuggestions);
+      case 'engine.update':
         updateStateBadge(msg.currentState);
+        if (msg.herResponse) showHerResponse(msg.herResponse);
         // Hide openers after first exchange
         document.getElementById('openers-panel').classList.add('hidden');
-        if (msg.safetyTriggered || msg.currentState === 'EXITED') {
-          setVoiceStatus('Session ended', '');
-          document.getElementById('mic-btn').disabled = true;
-        }
         break;
 
-      case 'response.audio':
-        // Queue her voice audio
-        audioQueue.push({ audio: msg.audio, label: 'her' });
-        playNextAudio();
-        break;
-
-      case 'coach.audio':
-        // Queue coach audio (plays after hers)
-        audioQueue.push({ audio: msg.audio, label: 'coach' });
-        playNextAudio();
+      case 'coach.suggestions':
+        showCoachSuggestions(msg);
         break;
 
       case 'session.exited':
         setVoiceStatus('Session ended');
         document.getElementById('mic-btn').disabled = true;
-        break;
-
-      case 'error':
-        console.error('[WS] Error:', msg.message);
-        setVoiceStatus('Error — try again');
-        isProcessing = false;
+        if (conversation) {
+          conversation.endSession().catch(() => {});
+          conversation = null;
+          isConversationActive = false;
+        }
         break;
     }
   };
 
-  ws.onclose = () => console.log('[WS] Disconnected');
-  ws.onerror = (e) => console.error('[WS] Error:', e);
+  coachWs.onclose = () => console.log('[Coach WS] Disconnected');
 }
+
+// ── ElevenLabs Conversation ─────────────────────────────────────
+
+async function startElevenLabsConversation() {
+  if (isConversationActive) {
+    // Stop conversation
+    if (conversation) {
+      await conversation.endSession();
+      conversation = null;
+    }
+    isConversationActive = false;
+    document.getElementById('mic-btn').classList.remove('recording');
+    document.getElementById('mic-pulse').classList.add('hidden');
+    setVoiceStatus('Conversation paused — tap mic to resume');
+    return;
+  }
+
+  try {
+    setVoiceStatus('Connecting...', 'processing');
+    document.getElementById('mic-btn').disabled = true;
+
+    // Get agent ID from server
+    const agentResp = await fetch('/api/elevenlabs/signed-url', { method: 'POST' });
+    const agentData = await agentResp.json();
+
+    if (!agentData.agentId) {
+      setVoiceStatus('ElevenLabs agent not configured');
+      document.getElementById('mic-btn').disabled = false;
+      return;
+    }
+
+    // Start ElevenLabs conversation with our system prompt
+    const ElevenLabs = window.ElevenLabsClient || window.elevenlabs;
+
+    conversation = await ElevenLabs.Conversation.startSession({
+      agentId: agentData.agentId,
+      overrides: {
+        agent: {
+          prompt: {
+            prompt: currentSession.systemPrompt,
+          },
+          firstMessage: null,
+        },
+      },
+      dynamicVariables: {
+        session_id: currentSession.sessionId,
+      },
+      onConnect: () => {
+        console.log('[ElevenLabs] Connected');
+        isConversationActive = true;
+        document.getElementById('mic-btn').disabled = false;
+        document.getElementById('mic-btn').classList.add('recording');
+        document.getElementById('mic-pulse').classList.remove('hidden');
+        setVoiceStatus('Listening — speak now', 'listening');
+        // Hide openers
+        document.getElementById('openers-panel').classList.add('hidden');
+      },
+      onDisconnect: () => {
+        console.log('[ElevenLabs] Disconnected');
+        isConversationActive = false;
+        document.getElementById('mic-btn').classList.remove('recording');
+        document.getElementById('mic-pulse').classList.add('hidden');
+        setVoiceStatus('Disconnected — tap mic to reconnect');
+        document.getElementById('mic-btn').disabled = false;
+      },
+      onMessage: (message) => {
+        // ElevenLabs sends transcript events
+        if (message.source === 'user') {
+          showTranscript(message.message, true);
+        } else if (message.source === 'ai') {
+          showHerResponse(message.message);
+        }
+      },
+      onModeChange: (mode) => {
+        // mode: { mode: 'speaking' | 'listening' }
+        if (mode.mode === 'speaking') {
+          setVoiceStatus('Her turn — speaking', 'playing');
+        } else if (mode.mode === 'listening') {
+          setVoiceStatus('Your turn — listening', 'listening');
+        }
+      },
+      onError: (error) => {
+        console.error('[ElevenLabs] Error:', error);
+        setVoiceStatus('Error — tap mic to retry');
+        document.getElementById('mic-btn').disabled = false;
+        document.getElementById('mic-btn').classList.remove('recording');
+        isConversationActive = false;
+      },
+    });
+
+  } catch (e) {
+    console.error('ElevenLabs start error:', e);
+    setVoiceStatus('Failed to start — tap mic to retry');
+    document.getElementById('mic-btn').disabled = false;
+    document.getElementById('mic-btn').classList.remove('recording');
+    isConversationActive = false;
+  }
+}
+
+// ── UI Helpers ──────────────────────────────────────────────────
 
 function setVoiceStatus(text, className) {
   const el = document.getElementById('voice-status');
@@ -274,11 +337,7 @@ function showTranscript(text, isFinal) {
   const area = document.getElementById('live-transcript');
   area.classList.remove('hidden');
   document.getElementById('transcript-text').textContent = text;
-  if (isFinal) {
-    area.style.opacity = '0.7';
-  } else {
-    area.style.opacity = '1';
-  }
+  area.style.opacity = isFinal ? '0.7' : '1';
 }
 
 function showHerResponse(text) {
@@ -286,7 +345,6 @@ function showHerResponse(text) {
   const area = document.getElementById('her-response-area');
   area.classList.remove('hidden');
   document.getElementById('her-response-text').textContent = text;
-  setVoiceStatus('Her turn — listen', 'playing');
 }
 
 function showCoachSuggestions(coach) {
@@ -301,139 +359,11 @@ function showCoachSuggestions(coach) {
     const card = document.createElement('button');
     card.className = 'suggestion-card';
     card.textContent = s;
-    card.addEventListener('click', () => {
-      // Put suggestion in text input for reference
-      document.getElementById('chat-input').value = s;
-    });
     list.appendChild(card);
   });
-}
 
-// ── Audio Playback (MP3 from base64) ────────────────────────────
-
-async function playNextAudio() {
-  if (isPlayingAudio || audioQueue.length === 0) return;
-  isPlayingAudio = true;
-
-  const item = audioQueue.shift();
-  if (item.label === 'her') {
-    setVoiceStatus('Speaking...', 'playing');
-  } else if (item.label === 'coach') {
-    setVoiceStatus('Coach speaking...', 'suggesting');
-  }
-
-  try {
-    if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const bytes = atob(item.audio);
-    const buffer = new Uint8Array(bytes.length);
-    for (let i = 0; i < bytes.length; i++) buffer[i] = bytes.charCodeAt(i);
-
-    const audioBuffer = await audioContext.decodeAudioData(buffer.buffer);
-    const source = audioContext.createBufferSource();
-    source.buffer = audioBuffer;
-    source.connect(audioContext.destination);
-    source.onended = () => {
-      isPlayingAudio = false;
-      if (audioQueue.length > 0) {
-        // Small pause between her voice and coach
-        setTimeout(() => playNextAudio(), 500);
-      } else {
-        setVoiceStatus('Your turn — tap mic to speak', 'suggesting');
-      }
-    };
-    source.start();
-  } catch (e) {
-    console.error('Audio playback error:', e);
-    isPlayingAudio = false;
-    if (audioQueue.length > 0) playNextAudio();
-    else setVoiceStatus('Your turn — tap mic', 'suggesting');
-  }
-}
-
-// ── Mic Recording ───────────────────────────────────────────────
-
-async function startRecording() {
-  if (isRecording || isProcessing) return;
-
-  try {
-    // Resume audio context (needed after user gesture)
-    if (audioContext) audioContext.resume();
-
-    mediaStream = await navigator.mediaDevices.getUserMedia({
-      audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true },
-    });
-
-    audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
-    const source = audioContext.createMediaStreamSource(mediaStream);
-
-    // ScriptProcessor to capture PCM and send via WebSocket
-    scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
-    scriptProcessor.onaudioprocess = (e) => {
-      if (!isRecording || !ws || ws.readyState !== WebSocket.OPEN) return;
-      const float32 = e.inputBuffer.getChannelData(0);
-      // Convert Float32 → Int16 PCM
-      const int16 = new Int16Array(float32.length);
-      for (let i = 0; i < float32.length; i++) {
-        const s = Math.max(-1, Math.min(1, float32[i]));
-        int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-      }
-      ws.send(int16.buffer);
-    };
-
-    source.connect(scriptProcessor);
-    scriptProcessor.connect(audioContext.destination);
-
-    isRecording = true;
-    document.getElementById('mic-btn').classList.add('recording');
-    document.getElementById('mic-pulse').classList.remove('hidden');
-    setVoiceStatus('Listening...', 'listening');
-    document.getElementById('live-transcript').classList.remove('hidden');
-    document.getElementById('transcript-text').textContent = '';
-
-    // Hide old coach suggestions while recording
-    document.getElementById('coach-panel').classList.add('hidden');
-  } catch (e) {
-    console.error('Mic error:', e);
-    setVoiceStatus('Mic access denied');
-  }
-}
-
-function stopRecording() {
-  if (!isRecording) return;
-  isRecording = false;
-
-  if (scriptProcessor) {
-    scriptProcessor.disconnect();
-    scriptProcessor = null;
-  }
-  if (mediaStream) {
-    mediaStream.getTracks().forEach((t) => t.stop());
-    mediaStream = null;
-  }
-
-  document.getElementById('mic-btn').classList.remove('recording');
-  document.getElementById('mic-pulse').classList.add('hidden');
-  setVoiceStatus('Processing...', 'processing');
-}
-
-// ── Text Fallback ───────────────────────────────────────────────
-
-function sendTextMessage() {
-  const input = document.getElementById('chat-input');
-  const content = input.value.trim();
-  if (!content || !ws || ws.readyState !== WebSocket.OPEN || !currentSession) return;
-
-  input.value = '';
-  showTranscript(content, true);
-  setVoiceStatus('Processing...', 'processing');
-  document.getElementById('openers-panel').classList.add('hidden');
-  document.getElementById('coach-panel').classList.add('hidden');
-
-  ws.send(JSON.stringify({
-    type: 'text.send',
-    sessionId: currentSession.sessionId,
-    content,
-  }));
+  // Scroll into view
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 // ── End Session ─────────────────────────────────────────────────
@@ -441,15 +371,15 @@ function sendTextMessage() {
 async function endSession() {
   if (!currentSession) return;
 
-  // Stop recording if active
-  if (isRecording) stopRecording();
-
-  // Close voice WebSocket
-  if (ws) {
-    ws.send(JSON.stringify({ type: 'voice.stop' }));
-    ws.close();
-    ws = null;
+  // Stop ElevenLabs conversation
+  if (conversation) {
+    try { await conversation.endSession(); } catch {}
+    conversation = null;
+    isConversationActive = false;
   }
+
+  // Close coach WebSocket
+  if (coachWs) { coachWs.close(); coachWs = null; }
 
   const btn = document.getElementById('end-session-btn');
   btn.disabled = true;
@@ -548,18 +478,8 @@ function renderTurnList(turns) {
 document.addEventListener('DOMContentLoaded', () => {
   initHome();
 
-  // Mic button: click to toggle recording
-  const micBtn = document.getElementById('mic-btn');
-  micBtn.addEventListener('click', () => {
-    if (isRecording) stopRecording();
-    else startRecording();
-  });
-
-  // Text fallback: Enter to send
-  document.getElementById('chat-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendTextMessage(); }
-  });
-  document.getElementById('send-btn').addEventListener('click', sendTextMessage);
+  // Mic button — starts/stops ElevenLabs conversation
+  document.getElementById('mic-btn').addEventListener('click', startElevenLabsConversation);
 
   // End session
   document.getElementById('end-session-btn').addEventListener('click', endSession);

@@ -4,7 +4,6 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
-const { v4: uuidv4 } = require('uuid');
 
 const { getPool, initTables, genId } = require('./lib/db');
 const { getClient } = require('./lib/claude');
@@ -14,17 +13,8 @@ const { initializeLatentVars } = require('./engine/latentVars');
 const { generateRandomBand } = require('./engine/stateMachine');
 const { isScenarioAllowed } = require('./engine/safety');
 const { generateDebrief } = require('./engine/coachTip');
-const DeepgramProxy = require('./lib/deepgram-proxy');
-const { synthesize, VOICES } = require('./lib/elevenlabs');
-
-// Deepgram proxy instance (created on first use)
-let deepgramProxy = null;
-function getDeepgram() {
-  if (!deepgramProxy && process.env.DEEPGRAM_API_KEY) {
-    deepgramProxy = new DeepgramProxy(process.env.DEEPGRAM_API_KEY);
-  }
-  return deepgramProxy;
-}
+const { handleChatCompletion, registerCoachSocket, unregisterCoachSocket } = require('./lib/custom-llm');
+const { buildSystemPrompt } = require('./engine/contextAssembly');
 
 const app = express();
 const server = http.createServer(app);
@@ -43,219 +33,46 @@ app.use(express.static(path.join(__dirname, 'public'), {
   },
 }));
 
-// ── WebSocket: Voice Protocol ───────────────────────────────────
-// Handles: mic audio streaming (STT), pipeline processing, TTS playback
-// Also supports text fallback via { type: 'text.send' }
+// ── Custom LLM endpoint for ElevenLabs Conversational AI ────────
+// ElevenLabs calls this as its "brain" — we run the full pipeline and stream back
+app.post('/v1/chat/completions', handleChatCompletion);
 
-const voiceSessions = new Map(); // ws → { sessionId, transcriptBuffer }
+// ── API: Signed URL for ElevenLabs agent (browser requests this) ─
+app.post('/api/elevenlabs/signed-url', async (req, res) => {
+  const agentId = process.env.ELEVENLABS_AGENT_ID;
+  if (!agentId) {
+    return res.status(500).json({ error: 'ELEVENLABS_AGENT_ID not configured' });
+  }
+  // For public agents, just return the agent ID — browser connects directly
+  // For private agents, you'd call ElevenLabs API to get a signed URL here
+  res.json({ agentId });
+});
+
+// ── WebSocket: Coach Push + UI State Updates ────────────────────
+// ElevenLabs handles voice. Our WebSocket pushes coach suggestions + state updates.
 
 wss.on('connection', (ws) => {
   ws.isAlive = true;
   ws.on('pong', () => { ws.isAlive = true; });
 
-  ws.on('message', async (data, isBinary) => {
-    // Binary data = PCM audio from mic → forward to Deepgram
-    if (isBinary) {
-      const vsess = voiceSessions.get(ws);
-      if (vsess?.sessionId) {
-        const dg = getDeepgram();
-        if (dg) dg.sendAudio(vsess.sessionId, Buffer.from(data));
-      }
-      return;
-    }
-
-    // JSON text message
+  ws.on('message', (data) => {
     let msg;
     try { msg = JSON.parse(data.toString()); } catch { return; }
 
-    if (msg.type === 'voice.start') {
-      // Start Deepgram STT session for this WebSocket
-      const sessionId = msg.sessionId;
-      if (!sessionId) return;
-
-      voiceSessions.set(ws, { sessionId, transcriptBuffer: '', finalTranscript: '' });
-
-      const dg = getDeepgram();
-      if (!dg) {
-        wsSend(ws, { type: 'error', message: 'Deepgram not configured' });
-        return;
-      }
-
-      dg.createSession(
-        sessionId,
-        // onTranscript
-        (t) => {
-          const vsess = voiceSessions.get(ws);
-          if (!vsess) return;
-
-          if (t.type === 'utterance_end') {
-            // Utterance ended — process the accumulated final transcript
-            if (vsess.finalTranscript.trim()) {
-              const text = vsess.finalTranscript.trim();
-              vsess.finalTranscript = '';
-              wsSend(ws, { type: 'transcript.final', text });
-              processVoiceMessage(ws, sessionId, text);
-            }
-            return;
-          }
-
-          if (t.isFinal) {
-            vsess.finalTranscript += ' ' + t.text;
-            wsSend(ws, { type: 'transcript.interim', text: vsess.finalTranscript.trim(), isFinal: true });
-          } else {
-            wsSend(ws, { type: 'transcript.interim', text: (vsess.finalTranscript + ' ' + t.text).trim(), isFinal: false });
-          }
-        },
-        // onError
-        (err) => wsSend(ws, { type: 'error', message: 'STT error: ' + err.message }),
-        // onReady
-        () => wsSend(ws, { type: 'voice.ready' })
-      );
-    }
-
-    else if (msg.type === 'voice.stop') {
-      const vsess = voiceSessions.get(ws);
-      if (vsess?.sessionId) {
-        const dg = getDeepgram();
-        if (dg) dg.closeSession(vsess.sessionId);
-      }
-      voiceSessions.delete(ws);
-    }
-
-    else if (msg.type === 'text.send') {
-      // Text fallback — same as HTTP endpoint but via WebSocket
-      if (msg.sessionId && msg.content) {
-        processVoiceMessage(ws, msg.sessionId, msg.content);
-      }
+    if (msg.type === 'session.bind') {
+      // Browser tells us which session to push coach data for
+      ws.sessionId = msg.sessionId;
+      registerCoachSocket(msg.sessionId, ws);
+      console.log('[WS] Coach socket bound to session', msg.sessionId);
     }
   });
 
   ws.on('close', () => {
-    const vsess = voiceSessions.get(ws);
-    if (vsess?.sessionId) {
-      const dg = getDeepgram();
-      if (dg) dg.closeSession(vsess.sessionId);
+    if (ws.sessionId) {
+      unregisterCoachSocket(ws.sessionId);
     }
-    voiceSessions.delete(ws);
   });
 });
-
-function wsSend(ws, obj) {
-  if (ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(obj));
-  }
-}
-
-// Process a user message (from voice transcript or text) and send back response + audio
-async function processVoiceMessage(ws, sessionId, content) {
-  wsSend(ws, { type: 'pipeline.started' });
-
-  try {
-    const pool = getPool();
-
-    // Fetch session
-    const sessionResult = await pool.query(
-      `SELECT * FROM sessions WHERE id = $1 AND status = 'active'`, [sessionId]
-    );
-    if (sessionResult.rows.length === 0) {
-      wsSend(ws, { type: 'error', message: 'Session not found or ended' });
-      return;
-    }
-
-    const session = sessionResult.rows[0];
-    const persona = session.persona_card;
-    const engineState = session.engine_state;
-    const scenario = SCENARIOS[session.scenario_id];
-
-    // Fetch messages
-    const messagesResult = await pool.query(
-      `SELECT role, content, turn_score as "turnScore", score_breakdown as "scoreBreakdown",
-              engine_snapshot as "engineSnapshot", msg_order as "order"
-       FROM messages WHERE session_id = $1 ORDER BY msg_order`, [sessionId]
-    );
-    const messages = messagesResult.rows;
-
-    // Safety flags
-    const userResult = await pool.query(`SELECT safety_flags FROM users WHERE id = $1`, [session.user_id]);
-    const userSafetyFlags = userResult.rows[0]?.safety_flags || 0;
-
-    // Run pipeline
-    const { result, updatedEngineState } = await runPipeline(
-      content, messages, engineState, persona, scenario, session.difficulty, userSafetyFlags
-    );
-
-    // Persist messages
-    const userMsgOrder = messages.length;
-    await pool.query(
-      `INSERT INTO messages (id, session_id, role, content, turn_score, score_breakdown, engine_snapshot, msg_order)
-       VALUES ($1, $2, 'user', $3, $4, $5, $6, $7)`,
-      [genId('msg'), sessionId, content, result.turnScore, JSON.stringify(result.scoreBreakdown),
-       JSON.stringify(result.engineSnapshot), userMsgOrder]
-    );
-    if (result.herResponse) {
-      await pool.query(
-        `INSERT INTO messages (id, session_id, role, content, msg_order)
-         VALUES ($1, $2, 'assistant', $3, $4)`,
-        [genId('msg'), sessionId, result.herResponse, userMsgOrder + 1]
-      );
-    }
-
-    // Update session
-    const newMessageCount = (session.message_count || 0) + 1;
-    await pool.query(
-      `UPDATE sessions SET engine_state = $1, message_count = $2, final_state = $3 WHERE id = $4`,
-      [JSON.stringify(updatedEngineState), newMessageCount, updatedEngineState.currentState, sessionId]
-    );
-    if (result.safetyTriggered) {
-      await pool.query(`UPDATE users SET safety_flags = safety_flags + 1 WHERE id = $1`, [session.user_id]);
-    }
-    if (updatedEngineState.currentState === 'EXITED') {
-      await pool.query(`UPDATE sessions SET status = 'completed', completed_at = NOW() WHERE id = $1`, [sessionId]);
-    }
-
-    // Send text response immediately (so UI updates fast)
-    wsSend(ws, {
-      type: 'response.text',
-      herResponse: result.herResponse,
-      coachSuggestions: result.coachSuggestions,
-      coachTip: result.coachTip,
-      turnScore: result.turnScore,
-      scoreBreakdown: result.scoreBreakdown,
-      currentState: result.currentState,
-      exchangeNumber: result.exchangeNumber,
-      safetyTriggered: result.safetyTriggered || false,
-    });
-
-    // Generate TTS audio in parallel (her voice + coach voice)
-    if (result.herResponse && process.env.ELEVENLABS_API_KEY) {
-      try {
-        const herAudio = await synthesize(result.herResponse, VOICES.persona_default);
-        wsSend(ws, { type: 'response.audio', audio: herAudio.toString('base64') });
-      } catch (e) {
-        console.error('Her TTS error:', e.message);
-      }
-
-      // Coach audio — read out the suggestions
-      if (result.coachSuggestions?.suggestions?.length > 0) {
-        try {
-          const coachText = result.coachSuggestions.coachNote + '... ' +
-            'You could say: ' + result.coachSuggestions.suggestions[0];
-          const coachAudio = await synthesize(coachText, VOICES.coach);
-          wsSend(ws, { type: 'coach.audio', audio: coachAudio.toString('base64') });
-        } catch (e) {
-          console.error('Coach TTS error:', e.message);
-        }
-      }
-    }
-
-    if (updatedEngineState.currentState === 'EXITED') {
-      wsSend(ws, { type: 'session.exited' });
-    }
-  } catch (error) {
-    console.error('Voice pipeline error:', error);
-    wsSend(ws, { type: 'error', message: 'Pipeline error: ' + error.message });
-  }
-}
 
 const pingInterval = setInterval(() => {
   wss.clients.forEach((ws) => {
@@ -341,6 +158,10 @@ app.post('/api/sessions', async (req, res) => {
       [sessionId, DEV_USER_ID, scenarioId, difficulty, JSON.stringify(persona), JSON.stringify(engineState)]
     );
 
+    // Build system prompt for ElevenLabs Custom LLM
+    const systemPrompt = buildSystemPrompt(persona, initialState, latentVars, scenario, 1)
+      + `\n\nSESSION_ID: ${sessionId}`;
+
     res.json({
       sessionId,
       scenario: { id: scenario.id, name: scenario.name, emoji: scenario.emoji, description: scenario.description },
@@ -349,6 +170,7 @@ app.post('/api/sessions', async (req, res) => {
       suggestedOpeners: SUGGESTED_OPENERS[scenarioId] || [],
       difficulty,
       initialState,
+      systemPrompt,
     });
   } catch (error) {
     console.error('Create session error:', error);
