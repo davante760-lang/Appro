@@ -9,6 +9,12 @@ const { buildSystemPrompt } = require('./contextAssembly');
 const { validateOutput, buildCorrectionNote } = require('./outputValidator');
 const { determineStep, getCoachLines, TIMING } = require('./scriptLibrary');
 
+// Models in priority order — fast + reliable for live conversation
+const LIVE_MODELS = [
+  'claude-haiku-4-20250514',
+  'claude-sonnet-4-20250514',
+];
+
 async function generatePersonaResponse(anthropic, persona, state, latentVars, messages, scenario, exchangeNumber) {
   const systemPrompt = buildSystemPrompt(persona, state, latentVars, scenario, exchangeNumber);
 
@@ -18,31 +24,57 @@ async function generatePersonaResponse(anthropic, persona, state, latentVars, me
     .slice(-10)
     .map((m) => ({ role: m.role, content: m.content }));
 
-  let bestAttempt = '';
-  let corrections = '';
+  // Try each model with retry on overload
+  for (const model of LIVE_MODELS) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const response = await anthropic.messages.create({
+          model,
+          max_tokens: 150,
+          system: systemPrompt,
+          messages: formattedMessages,
+        });
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const fullSystem = attempt === 0
-      ? systemPrompt
-      : `${systemPrompt}\n\nCORRECTION NEEDED:\n${corrections}`;
+        const text = response.content[0].type === 'text' ? response.content[0].text : '...';
 
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 150,
-      system: fullSystem,
-      messages: formattedMessages,
-    });
+        const validation = validateOutput(text, persona, state, []);
+        if (validation.passed) return text;
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '...';
-    bestAttempt = text;
+        // If validation failed on first attempt, retry with correction
+        if (attempt === 0) {
+          const corrections = buildCorrectionNote(validation.failures);
+          const retryResponse = await anthropic.messages.create({
+            model,
+            max_tokens: 150,
+            system: `${systemPrompt}\n\nCORRECTION NEEDED:\n${corrections}`,
+            messages: formattedMessages,
+          });
+          const retryText = retryResponse.content[0].type === 'text' ? retryResponse.content[0].text : text;
+          return retryText;
+        }
 
-    const validation = validateOutput(text, persona, state, []);
-    if (validation.passed) return text;
+        return text;
+      } catch (err) {
+        const status = err?.status || err?.error?.status;
+        console.error(`[Pipeline] ${model} attempt ${attempt + 1} failed:`, status, err.message);
 
-    corrections = buildCorrectionNote(validation.failures);
+        // If overloaded (529) or rate limited (429), try next model
+        if (status === 529 || status === 429) {
+          if (attempt === 0) {
+            // Wait briefly then retry same model
+            await new Promise(r => setTimeout(r, 500));
+            continue;
+          }
+          // Move to next model
+          break;
+        }
+        // Other errors — move to next model
+        break;
+      }
+    }
   }
 
-  return bestAttempt;
+  throw new Error('All models failed');
 }
 
 async function runPipeline(userMessage, messages, engineState, persona, scenario, difficulty, _userSafetyFlags) {
@@ -72,9 +104,8 @@ async function runPipeline(userMessage, messages, engineState, persona, scenario
         updatedMessages, scenario, engineState.exchangeNumber
       );
     } catch (err) {
-      console.error('[Pipeline] Persona response failed:', err.message, err.stack);
-      // Temporarily expose error for debugging — remove later
-      herResponse = "DEBUG: " + err.message;
+      console.error('[Pipeline] Persona response failed:', err.message);
+      herResponse = "Hmm, say that again?";
     }
   }
 
