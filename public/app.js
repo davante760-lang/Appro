@@ -284,36 +284,43 @@ async function startElevenLabsConversation() {
     elWs.onmessage = (event) => {
       const msg = JSON.parse(event.data);
 
+      // Debug: log every message type and its keys
+      if (msg.type !== 'audio') {
+        console.log('[ElevenLabs] Message:', msg.type, JSON.stringify(msg).substring(0, 300));
+      }
+
       switch (msg.type) {
         case 'audio':
-          // Base64 audio chunk from ElevenLabs TTS — play it
-          if (msg.audio_event?.audio_base_64) {
-            playAudioChunk(msg.audio_event.audio_base_64);
+          // Try multiple possible field paths for the audio data
+          const audioB64 = msg.audio_event?.audio_base_64
+            || msg.audio?.chunk
+            || msg.audio?.audio_base_64
+            || msg.audio_chunk;
+          if (audioB64) {
+            playAudioChunk(audioB64);
             setVoiceStatus('Her turn — speaking', 'playing');
+          } else {
+            console.warn('[ElevenLabs] Audio msg but no audio data found. Keys:', Object.keys(msg));
           }
           break;
 
         case 'agent_response':
-          // The AI's text response
-          if (msg.agent_response_event?.agent_response) {
-            showHerResponse(msg.agent_response_event.agent_response);
-          }
+          const agentText = msg.agent_response_event?.agent_response
+            || msg.agent_response?.message;
+          if (agentText) showHerResponse(agentText);
           break;
 
         case 'user_transcript':
-          // User's speech transcribed
-          if (msg.user_transcription_event?.user_transcript) {
-            showTranscript(msg.user_transcription_event.user_transcript, true);
-          }
+          const userText = msg.user_transcription_event?.user_transcript
+            || msg.user_transcript?.text;
+          if (userText) showTranscript(userText, true);
           break;
 
         case 'interruption':
-          // User interrupted — stop audio playback
           stopAudioPlayback();
           break;
 
         case 'agent_response_correction':
-          // Corrected transcript
           if (msg.agent_response_correction_event?.corrected_response) {
             showHerResponse(msg.agent_response_correction_event.corrected_response);
           }
@@ -324,8 +331,26 @@ async function startElevenLabsConversation() {
           break;
 
         case 'conversation_initiation_metadata':
-          console.log('[ElevenLabs] Conversation initialized:', msg.conversation_initiation_metadata_event?.conversation_id);
+          console.log('[ElevenLabs] Conversation initialized:', JSON.stringify(msg).substring(0, 500));
+          // Check what audio format is configured
+          const meta = msg.conversation_initiation_metadata_event || msg;
+          console.log('[ElevenLabs] Agent config:', JSON.stringify(meta).substring(0, 500));
           break;
+
+        case 'ping':
+          // Respond to pings to keep connection alive
+          if (elWs && elWs.readyState === WebSocket.OPEN) {
+            elWs.send(JSON.stringify({ type: 'pong' }));
+          }
+          break;
+
+        case 'error':
+          console.error('[ElevenLabs] Error from server:', JSON.stringify(msg));
+          setVoiceStatus('Error: ' + (msg.message || msg.error || 'Unknown'), 'error');
+          break;
+
+        default:
+          console.log('[ElevenLabs] Unhandled message type:', msg.type);
       }
     };
 
@@ -343,6 +368,7 @@ async function startElevenLabsConversation() {
       console.error('[ElevenLabs] WebSocket error:', err);
       setVoiceStatus('Connection error — tap mic to retry');
       document.getElementById('mic-btn').disabled = false;
+      document.getElementById('mic-btn').classList.remove('recording');
     };
 
   } catch (e) {
@@ -400,13 +426,15 @@ function stopMicCapture() {
   if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
 }
 
-// ── Audio Playback (ElevenLabs TTS chunks — raw PCM 16-bit 16kHz) ──
+// ── Audio Playback (ElevenLabs TTS chunks) ──────────────────────
+// ElevenLabs may send MP3 or raw PCM depending on agent config.
+// We try decodeAudioData (MP3/WAV/OGG) first, fall back to raw PCM.
 
 let audioPlaybackQueue = [];
 let isPlayingAudio = false;
 let playbackContext = null;
 let nextPlayTime = 0;
-const PLAYBACK_SAMPLE_RATE = 16000;
+let detectedAudioFormat = null; // 'encoded' or 'pcm'
 
 async function playAudioChunk(base64Audio) {
   audioPlaybackQueue.push(base64Audio);
@@ -423,7 +451,7 @@ async function processAudioQueue() {
   const chunk = audioPlaybackQueue.shift();
   try {
     if (!playbackContext) {
-      playbackContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: PLAYBACK_SAMPLE_RATE });
+      playbackContext = new (window.AudioContext || window.webkitAudioContext)();
     }
     await playbackContext.resume();
 
@@ -432,15 +460,35 @@ async function processAudioQueue() {
     const bytes = new Uint8Array(binaryStr.length);
     for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
 
-    // ElevenLabs sends PCM 16-bit signed LE — convert to Float32 for Web Audio
-    const int16 = new Int16Array(bytes.buffer);
-    const float32 = new Float32Array(int16.length);
-    for (let i = 0; i < int16.length; i++) {
-      float32[i] = int16[i] / 32768;
+    let audioBuffer;
+
+    if (detectedAudioFormat !== 'pcm') {
+      // Try decoding as encoded audio (MP3, WAV, OGG, AAC)
+      try {
+        audioBuffer = await playbackContext.decodeAudioData(bytes.buffer.slice(0));
+        if (!detectedAudioFormat) {
+          detectedAudioFormat = 'encoded';
+          console.log('[Audio] Detected encoded format (MP3/WAV)');
+        }
+      } catch {
+        // Not encoded audio — try PCM
+        if (!detectedAudioFormat) {
+          detectedAudioFormat = 'pcm';
+          console.log('[Audio] Encoded decode failed, using PCM 16-bit 16kHz');
+        }
+      }
     }
 
-    const audioBuffer = playbackContext.createBuffer(1, float32.length, PLAYBACK_SAMPLE_RATE);
-    audioBuffer.getChannelData(0).set(float32);
+    if (!audioBuffer) {
+      // Raw PCM 16-bit signed LE at 16kHz
+      const int16 = new Int16Array(bytes.buffer);
+      const float32 = new Float32Array(int16.length);
+      for (let i = 0; i < int16.length; i++) {
+        float32[i] = int16[i] / 32768;
+      }
+      audioBuffer = playbackContext.createBuffer(1, float32.length, 16000);
+      audioBuffer.getChannelData(0).set(float32);
+    }
 
     const source = playbackContext.createBufferSource();
     source.buffer = audioBuffer;
@@ -453,7 +501,7 @@ async function processAudioQueue() {
     source.start(nextPlayTime);
     nextPlayTime += audioBuffer.duration;
   } catch (e) {
-    console.warn('Audio playback error:', e.message);
+    console.warn('[Audio] Playback error:', e.message);
     processAudioQueue();
   }
 }
@@ -462,6 +510,7 @@ function stopAudioPlayback() {
   audioPlaybackQueue = [];
   isPlayingAudio = false;
   nextPlayTime = 0;
+  detectedAudioFormat = null;
 }
 
 // ── UI Helpers ──────────────────────────────────────────────────
