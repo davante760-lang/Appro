@@ -11,7 +11,7 @@ const { determineStep, getCoachLines, TIMING } = require('./scriptLibrary');
 
 // Models in priority order — fast + reliable for live conversation
 const LIVE_MODELS = [
-  'claude-haiku-4-20250514',
+  'claude-3-5-haiku-20241022',
   'claude-sonnet-4-20250514',
 ];
 
