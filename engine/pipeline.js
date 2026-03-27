@@ -1,15 +1,13 @@
-// Pipeline orchestrator — runs full engine per user message
-// Safety → Scoring → Latent Vars → State Machine → Context → Claude Persona → Validator → Coach Tip
+// Pipeline orchestrator — LIVE mode
+// Only one Claude call: persona response. That's it.
+// No scoring. No vibe analysis. No safety check.
+// You read the room yourself. The coach feeds you lines from your playbook.
+// Full scoring happens at session end (debrief).
 
 const { getClient } = require('../lib/claude');
-const { checkSafety, getSafetyExitResponse } = require('./safety');
-const { scoreTurn, updateCumulativeScore, applyRecoveryPenalty } = require('./scoring');
-const { updateLatentVars } = require('./latentVars');
-const { evaluateTransition } = require('./stateMachine');
-const { evaluateOpener } = require('./openerEvaluator');
 const { buildSystemPrompt } = require('./contextAssembly');
 const { validateOutput, buildCorrectionNote } = require('./outputValidator');
-const { generateCoachTip, generateCoachSuggestions } = require('./coachTip');
+const { determineStep, getCoachLines, TIMING } = require('./scriptLibrary');
 
 async function generatePersonaResponse(anthropic, persona, state, latentVars, messages, scenario, exchangeNumber) {
   const systemPrompt = buildSystemPrompt(persona, state, latentVars, scenario, exchangeNumber);
@@ -21,7 +19,7 @@ async function generatePersonaResponse(anthropic, persona, state, latentVars, me
   let bestAttempt = '';
   let corrections = '';
 
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 2; attempt++) {
     const fullSystem = attempt === 0
       ? systemPrompt
       : `${systemPrompt}\n\nCORRECTION NEEDED:\n${corrections}`;
@@ -37,166 +35,121 @@ async function generatePersonaResponse(anthropic, persona, state, latentVars, me
     bestAttempt = text;
 
     const validation = validateOutput(text, persona, state, []);
-    if (validation.passed) {
-      return text;
-    }
+    if (validation.passed) return text;
 
     corrections = buildCorrectionNote(validation.failures);
-    console.warn(`Output validation failed (attempt ${attempt + 1}):`, validation.failures);
   }
 
   return bestAttempt;
 }
 
-async function runPipeline(userMessage, messages, engineState, persona, scenario, difficulty, userSafetyFlags) {
+async function runPipeline(userMessage, messages, engineState, persona, scenario, difficulty, _userSafetyFlags) {
   const anthropic = getClient();
-  const previousState = engineState.currentState;
 
-  // 1. Safety Check
-  const safety = await checkSafety(
-    anthropic, userMessage, engineState.currentState,
-    engineState.ignoredExitCues, userSafetyFlags, engineState.exchangeNumber
-  );
-
-  if (!safety.passed) {
-    const exitResponse = getSafetyExitResponse(safety.trigger);
-    const updatedState = { ...engineState, currentState: 'EXITED' };
-    const snapshot = {
-      state: 'EXITED',
-      latentVars: engineState.latentVars,
-      cumulativeScore: engineState.cumulativeScore,
-      exchangeNumber: engineState.exchangeNumber,
-      consecutiveWeakTurns: engineState.consecutiveWeakTurns,
-      consecutiveStrongTurns: engineState.consecutiveStrongTurns,
-      ignoredExitCues: engineState.ignoredExitCues,
-      chemistrySpikeUsed: engineState.chemistrySpikeUsed,
-    };
-    return {
-      result: {
-        herResponse: exitResponse,
-        coachTip: { text: 'That crossed a line. In real life, this conversation would be over.', phase: 'critical' },
-        turnScore: -10,
-        scoreBreakdown: { safety_violation: -10 },
-        currentState: 'EXITED',
-        exchangeNumber: engineState.exchangeNumber,
-        engineSnapshot: snapshot,
-        safetyTriggered: true,
-      },
-      updatedEngineState: updatedState,
-    };
-  }
-
-  // 2. Score the User's Turn
-  const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant')?.content || null;
-
-  let turnScoreResult;
-  if (engineState.exchangeNumber === 1 && messages.filter((m) => m.role === 'user').length === 0) {
-    const openerScore = await evaluateOpener(anthropic, userMessage, scenario, persona, scenario.contextFlags);
-    turnScoreResult = { total: openerScore, breakdown: { opener_evaluation: openerScore } };
-  } else {
-    turnScoreResult = await scoreTurn(
-      anthropic, userMessage, lastAssistantMsg, messages,
-      engineState.currentState, scenario, persona, engineState.exchangeNumber
-    );
-  }
-
-  // Apply recovery penalty
-  const adjustedScore = applyRecoveryPenalty(turnScoreResult.total, engineState.consecutiveWeakTurns);
-
-  // 3. Update Cumulative Score
-  const newCumulativeScore = updateCumulativeScore(
-    engineState.cumulativeScore, adjustedScore,
-    engineState.exchangeNumber, engineState.recentTurnScores
-  );
-
-  // Track consecutive turns
-  const newWeakTurns = adjustedScore <= 0 ? engineState.consecutiveWeakTurns + 1 : 0;
-  const newStrongTurns = adjustedScore >= 2 ? engineState.consecutiveStrongTurns + 1 : 0;
-
-  // Check if exit cue was ignored
-  let newIgnoredExitCues = engineState.ignoredExitCues;
-  if (engineState.currentState === 'DISENGAGING' && adjustedScore < 4) {
-    newIgnoredExitCues += 1;
-  }
-
-  // 4. Update Latent Variables
-  const newLatentVars = updateLatentVars(engineState.latentVars, adjustedScore, engineState.exchangeNumber);
-
-  // 5. State Transition
-  const { newState, chemistrySpikeUsed } = evaluateTransition({
-    currentState: engineState.currentState,
-    cumulativeScore: newCumulativeScore,
-    turnScore: adjustedScore,
-    consecutiveWeakTurns: newWeakTurns,
-    consecutiveStrongTurns: newStrongTurns,
-    ignoredExitCues: newIgnoredExitCues,
-    exchangeNumber: engineState.exchangeNumber,
-    latentVars: newLatentVars,
-    chemistrySpikeUsed: engineState.chemistrySpikeUsed,
-    randomBand: engineState.randomBand,
-  });
-
-  // 6. Generate Persona Response
+  // 1. Generate Persona Response — the ONE Claude call
   const updatedMessages = [
     ...messages,
-    { role: 'user', content: userMessage, turnScore: adjustedScore, scoreBreakdown: turnScoreResult.breakdown, order: messages.length },
+    { role: 'user', content: userMessage, order: messages.length },
   ];
 
-  let herResponse;
-  if (newState === 'EXITED' && engineState.currentState === 'EXITED') {
-    herResponse = '';
-  } else {
+  let herResponse = '';
+  if (engineState.currentState !== 'EXITED') {
     herResponse = await generatePersonaResponse(
-      anthropic, persona, newState, newLatentVars, updatedMessages, scenario, engineState.exchangeNumber
+      anthropic, persona, engineState.currentState, engineState.latentVars,
+      updatedMessages, scenario, engineState.exchangeNumber
     );
   }
 
-  // 7. Coach Tip (legacy) + Coach Suggestions (proactive)
-  const coachTip = generateCoachTip(adjustedScore, newState, engineState.exchangeNumber, previousState);
+  // 2. Progress the state naturally based on exchange number + difficulty
+  // No scoring, no vibe analysis — just natural conversation flow
+  const newState = progressState(engineState, difficulty);
 
-  // 7b. Generate proactive coach suggestions (what to say next)
-  let coachSuggestions = { suggestions: [], coachNote: '' };
-  if (herResponse && newState !== 'EXITED') {
-    coachSuggestions = await generateCoachSuggestions(
-      anthropic, herResponse, newState, newLatentVars, updatedMessages, persona, scenario, engineState.exchangeNumber
-    );
-  }
+  // 3. Determine your step + get coach lines from the playbook (instant)
+  const currentStep = determineStep(
+    engineState.exchangeNumber,
+    newState,
+    false, // not tracking her questions — you read the room
+    scenario.id
+  );
+  const coachSuggestions = getCoachLines(currentStep, scenario.id, engineState.exchangeNumber, herResponse);
 
-  // 8. Build Snapshot
+  // 4. Update engine state
   const newExchangeNumber = engineState.exchangeNumber + 1;
-  const recentTurns = [...engineState.recentTurnScores, adjustedScore].slice(-2);
+
+  // Time pressure warning
+  if (newExchangeNumber >= TIMING.HARD_STOP_EXCHANGE && currentStep !== 'CLOSE' && currentStep !== 'DONE') {
+    coachSuggestions.coachNote = "⏰ HARD STOP — you've been talking too long. Close or walk. Now.";
+  }
 
   const snapshot = {
     state: newState,
-    latentVars: newLatentVars,
-    cumulativeScore: newCumulativeScore,
+    latentVars: engineState.latentVars,
+    cumulativeScore: 0,
     exchangeNumber: newExchangeNumber,
-    consecutiveWeakTurns: newWeakTurns,
-    consecutiveStrongTurns: newStrongTurns,
-    ignoredExitCues: newIgnoredExitCues,
-    chemistrySpikeUsed,
+    consecutiveWeakTurns: 0,
+    consecutiveStrongTurns: 0,
+    ignoredExitCues: engineState.ignoredExitCues,
+    chemistrySpikeUsed: engineState.chemistrySpikeUsed,
+    step: currentStep,
   };
 
   const updatedEngineState = {
-    ...snapshot,
+    ...engineState,
     currentState: newState,
-    randomBand: engineState.randomBand,
-    recentTurnScores: recentTurns,
+    exchangeNumber: newExchangeNumber,
   };
 
   return {
     result: {
       herResponse,
-      coachTip,
       coachSuggestions,
-      turnScore: adjustedScore,
-      scoreBreakdown: turnScoreResult.breakdown,
+      coachTip: null,
+      turnScore: 0,
+      scoreBreakdown: {},
       currentState: newState,
+      currentStep,
       exchangeNumber: newExchangeNumber,
       engineSnapshot: snapshot,
     },
     updatedEngineState,
   };
+}
+
+// Simple state progression — she warms up naturally over exchanges
+// The persona prompt + difficulty controls HOW she responds
+// This just keeps the state moving so the persona prompt stays accurate
+function progressState(engineState, difficulty) {
+  const exchange = engineState.exchangeNumber;
+  const current = engineState.currentState;
+
+  if (current === 'EXITED') return 'EXITED';
+
+  // Warm difficulty — she opens up faster
+  if (difficulty === 'warm') {
+    if (exchange <= 1) return 'NEUTRAL';
+    if (exchange <= 2) return 'WARMING';
+    if (exchange <= 4) return 'WARMING';
+    return 'ENGAGED';
+  }
+
+  // Neutral difficulty — standard progression
+  if (difficulty === 'neutral') {
+    if (exchange <= 2) return 'NEUTRAL';
+    if (exchange <= 4) return 'WARMING';
+    if (exchange <= 6) return 'ENGAGED';
+    return 'ENGAGED';
+  }
+
+  // Guarded difficulty — slow to warm, might disengage
+  if (difficulty === 'guarded') {
+    if (exchange <= 2) return 'GUARDED';
+    if (exchange <= 4) return 'NEUTRAL';
+    if (exchange <= 5) return 'WARMING';
+    if (exchange <= 7) return 'ENGAGED';
+    return 'ENGAGED';
+  }
+
+  return current;
 }
 
 module.exports = { runPipeline };
