@@ -338,9 +338,10 @@ async function startElevenLabsConversation() {
           break;
 
         case 'ping':
-          // Respond to pings to keep connection alive
+          // Respond to pings with the event_id to keep connection alive
+          const pingEventId = msg.ping_event?.event_id;
           if (elWs && elWs.readyState === WebSocket.OPEN) {
-            elWs.send(JSON.stringify({ type: 'pong' }));
+            elWs.send(JSON.stringify({ type: 'pong', event_id: pingEventId }));
           }
           break;
 
