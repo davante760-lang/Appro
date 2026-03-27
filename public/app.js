@@ -4,9 +4,12 @@ let currentSession = null;
 let selectedScenario = null;
 let selectedDifficulty = null;
 
-// ElevenLabs conversation instance
-let conversation = null;
+// ElevenLabs conversation (raw WebSocket)
+let elWs = null;
 let isConversationActive = false;
+let audioContext = null;
+let mediaStream = null;
+let scriptProcessor = null;
 
 // Our WebSocket for coach push + state updates
 let coachWs = null;
@@ -209,11 +212,7 @@ function connectCoachWebSocket(sessionId) {
       case 'session.exited':
         setVoiceStatus('Session ended');
         document.getElementById('mic-btn').disabled = true;
-        if (conversation) {
-          conversation.endSession().catch(() => {});
-          conversation = null;
-          isConversationActive = false;
-        }
+        stopElevenLabsConversation();
         break;
     }
   };
@@ -221,19 +220,11 @@ function connectCoachWebSocket(sessionId) {
   coachWs.onclose = () => console.log('[Coach WS] Disconnected');
 }
 
-// ── ElevenLabs Conversation ─────────────────────────────────────
+// ── ElevenLabs Conversation (Raw WebSocket) ─────────────────────
 
 async function startElevenLabsConversation() {
   if (isConversationActive) {
-    // Stop conversation
-    if (conversation) {
-      await conversation.endSession();
-      conversation = null;
-    }
-    isConversationActive = false;
-    document.getElementById('mic-btn').classList.remove('recording');
-    document.getElementById('mic-pulse').classList.add('hidden');
-    setVoiceStatus('Conversation paused — tap mic to resume');
+    stopElevenLabsConversation();
     return;
   }
 
@@ -246,77 +237,206 @@ async function startElevenLabsConversation() {
     const agentData = await agentResp.json();
 
     if (!agentData.agentId) {
-      setVoiceStatus('ElevenLabs agent not configured');
+      setVoiceStatus('ElevenLabs agent not configured — check ELEVENLABS_AGENT_ID');
       document.getElementById('mic-btn').disabled = false;
       return;
     }
 
-    // Start ElevenLabs conversation with our system prompt
-    const ElevenLabs = window.ElevenLabsClient || window.elevenlabs;
-
-    conversation = await ElevenLabs.Conversation.startSession({
-      agentId: agentData.agentId,
-      overrides: {
-        agent: {
-          prompt: {
-            prompt: currentSession.systemPrompt,
-          },
-          firstMessage: null,
-        },
-      },
-      dynamicVariables: {
-        session_id: currentSession.sessionId,
-      },
-      onConnect: () => {
-        console.log('[ElevenLabs] Connected');
-        isConversationActive = true;
-        document.getElementById('mic-btn').disabled = false;
-        document.getElementById('mic-btn').classList.add('recording');
-        document.getElementById('mic-pulse').classList.remove('hidden');
-        setVoiceStatus('Listening — speak now', 'listening');
-        // Hide openers
-        document.getElementById('openers-panel').classList.add('hidden');
-      },
-      onDisconnect: () => {
-        console.log('[ElevenLabs] Disconnected');
-        isConversationActive = false;
-        document.getElementById('mic-btn').classList.remove('recording');
-        document.getElementById('mic-pulse').classList.add('hidden');
-        setVoiceStatus('Disconnected — tap mic to reconnect');
-        document.getElementById('mic-btn').disabled = false;
-      },
-      onMessage: (message) => {
-        // ElevenLabs sends transcript events
-        if (message.source === 'user') {
-          showTranscript(message.message, true);
-        } else if (message.source === 'ai') {
-          showHerResponse(message.message);
-        }
-      },
-      onModeChange: (mode) => {
-        // mode: { mode: 'speaking' | 'listening' }
-        if (mode.mode === 'speaking') {
-          setVoiceStatus('Her turn — speaking', 'playing');
-        } else if (mode.mode === 'listening') {
-          setVoiceStatus('Your turn — listening', 'listening');
-        }
-      },
-      onError: (error) => {
-        console.error('[ElevenLabs] Error:', error);
-        setVoiceStatus('Error — tap mic to retry');
-        document.getElementById('mic-btn').disabled = false;
-        document.getElementById('mic-btn').classList.remove('recording');
-        isConversationActive = false;
-      },
+    // Request mic access
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true },
     });
+
+    // Connect to ElevenLabs Conversational AI WebSocket
+    const wsUrl = `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${agentData.agentId}`;
+    elWs = new WebSocket(wsUrl);
+
+    elWs.onopen = () => {
+      console.log('[ElevenLabs] WebSocket connected');
+
+      // Send conversation initiation data with our system prompt + session ID
+      elWs.send(JSON.stringify({
+        type: 'conversation_initiation_client_data',
+        conversation_initiation_client_data: {
+          conversation_config_override: {
+            agent: {
+              prompt: { prompt: currentSession.systemPrompt },
+              first_message: null,
+            },
+          },
+          dynamic_variables: {
+            session_id: currentSession.sessionId,
+          },
+        },
+      }));
+
+      // Start capturing and sending audio
+      startMicCapture();
+
+      isConversationActive = true;
+      document.getElementById('mic-btn').disabled = false;
+      document.getElementById('mic-btn').classList.add('recording');
+      document.getElementById('mic-pulse').classList.remove('hidden');
+      setVoiceStatus('Listening — speak now', 'listening');
+      document.getElementById('openers-panel').classList.add('hidden');
+    };
+
+    elWs.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+
+      switch (msg.type) {
+        case 'audio':
+          // Base64 audio chunk from ElevenLabs TTS — play it
+          if (msg.audio_event?.audio_base_64) {
+            playAudioChunk(msg.audio_event.audio_base_64);
+            setVoiceStatus('Her turn — speaking', 'playing');
+          }
+          break;
+
+        case 'agent_response':
+          // The AI's text response
+          if (msg.agent_response_event?.agent_response) {
+            showHerResponse(msg.agent_response_event.agent_response);
+          }
+          break;
+
+        case 'user_transcript':
+          // User's speech transcribed
+          if (msg.user_transcription_event?.user_transcript) {
+            showTranscript(msg.user_transcription_event.user_transcript, true);
+          }
+          break;
+
+        case 'interruption':
+          // User interrupted — stop audio playback
+          stopAudioPlayback();
+          break;
+
+        case 'agent_response_correction':
+          // Corrected transcript
+          if (msg.agent_response_correction_event?.corrected_response) {
+            showHerResponse(msg.agent_response_correction_event.corrected_response);
+          }
+          break;
+
+        case 'turn_end':
+          setVoiceStatus('Your turn — speak', 'listening');
+          break;
+
+        case 'conversation_initiation_metadata':
+          console.log('[ElevenLabs] Conversation initialized:', msg.conversation_initiation_metadata_event?.conversation_id);
+          break;
+      }
+    };
+
+    elWs.onclose = () => {
+      console.log('[ElevenLabs] WebSocket closed');
+      stopMicCapture();
+      isConversationActive = false;
+      document.getElementById('mic-btn').classList.remove('recording');
+      document.getElementById('mic-pulse').classList.add('hidden');
+      document.getElementById('mic-btn').disabled = false;
+      setVoiceStatus('Disconnected — tap mic to reconnect');
+    };
+
+    elWs.onerror = (err) => {
+      console.error('[ElevenLabs] WebSocket error:', err);
+      setVoiceStatus('Connection error — tap mic to retry');
+      document.getElementById('mic-btn').disabled = false;
+    };
 
   } catch (e) {
     console.error('ElevenLabs start error:', e);
-    setVoiceStatus('Failed to start — tap mic to retry');
+    setVoiceStatus(e.name === 'NotAllowedError' ? 'Mic access denied' : 'Failed to start — tap mic to retry');
     document.getElementById('mic-btn').disabled = false;
     document.getElementById('mic-btn').classList.remove('recording');
     isConversationActive = false;
   }
+}
+
+function stopElevenLabsConversation() {
+  stopMicCapture();
+  if (elWs) { elWs.close(); elWs = null; }
+  isConversationActive = false;
+  document.getElementById('mic-btn').classList.remove('recording');
+  document.getElementById('mic-pulse').classList.add('hidden');
+  setVoiceStatus('Conversation paused — tap mic to resume');
+}
+
+// ── Mic Capture → ElevenLabs ────────────────────────────────────
+
+function startMicCapture() {
+  if (!mediaStream) return;
+  audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+  const source = audioContext.createMediaStreamSource(mediaStream);
+  scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+
+  scriptProcessor.onaudioprocess = (e) => {
+    if (!isConversationActive || !elWs || elWs.readyState !== WebSocket.OPEN) return;
+    const float32 = e.inputBuffer.getChannelData(0);
+    // Convert to Int16 PCM then base64
+    const int16 = new Int16Array(float32.length);
+    for (let i = 0; i < float32.length; i++) {
+      const s = Math.max(-1, Math.min(1, float32[i]));
+      int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    }
+    // ElevenLabs expects base64-encoded audio chunks
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(int16.buffer)));
+    elWs.send(JSON.stringify({
+      user_audio_chunk: base64,
+    }));
+  };
+
+  source.connect(scriptProcessor);
+  scriptProcessor.connect(audioContext.destination);
+}
+
+function stopMicCapture() {
+  if (scriptProcessor) { scriptProcessor.disconnect(); scriptProcessor = null; }
+  if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+}
+
+// ── Audio Playback (ElevenLabs TTS chunks) ──────────────────────
+
+let audioPlaybackQueue = [];
+let isDecodingAudio = false;
+
+async function playAudioChunk(base64Audio) {
+  audioPlaybackQueue.push(base64Audio);
+  if (!isDecodingAudio) processAudioQueue();
+}
+
+async function processAudioQueue() {
+  if (audioPlaybackQueue.length === 0) {
+    isDecodingAudio = false;
+    return;
+  }
+  isDecodingAudio = true;
+
+  const chunk = audioPlaybackQueue.shift();
+  try {
+    if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    await audioContext.resume();
+
+    const bytes = atob(chunk);
+    const buffer = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) buffer[i] = bytes.charCodeAt(i);
+
+    const audioBuffer = await audioContext.decodeAudioData(buffer.buffer.slice(0));
+    const source = audioContext.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(audioContext.destination);
+    source.onended = () => processAudioQueue();
+    source.start();
+  } catch (e) {
+    console.warn('Audio decode error, skipping chunk:', e.message);
+    processAudioQueue();
+  }
+}
+
+function stopAudioPlayback() {
+  audioPlaybackQueue = [];
+  isDecodingAudio = false;
 }
 
 // ── UI Helpers ──────────────────────────────────────────────────
@@ -372,11 +492,7 @@ async function endSession() {
   if (!currentSession) return;
 
   // Stop ElevenLabs conversation
-  if (conversation) {
-    try { await conversation.endSession(); } catch {}
-    conversation = null;
-    isConversationActive = false;
-  }
+  stopElevenLabsConversation();
 
   // Close coach WebSocket
   if (coachWs) { coachWs.close(); coachWs = null; }
