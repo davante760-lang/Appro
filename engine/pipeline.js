@@ -9,10 +9,11 @@ const { buildSystemPrompt } = require('./contextAssembly');
 const { validateOutput, buildCorrectionNote } = require('./outputValidator');
 const { determineStep, getCoachLines, TIMING } = require('./scriptLibrary');
 
-// Models in priority order — fast + reliable for live conversation
+// Models in priority order for live conversation
+// API key has access to: Sonnet 4, Opus 4 (no Haiku)
 const LIVE_MODELS = [
-  'claude-3-5-haiku-20241022',
   'claude-sonnet-4-20250514',
+  'claude-opus-4-20250514',
 ];
 
 async function generatePersonaResponse(anthropic, persona, state, latentVars, messages, scenario, exchangeNumber) {
