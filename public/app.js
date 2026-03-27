@@ -381,7 +381,11 @@ function startMicCapture() {
       int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
     }
     // ElevenLabs expects base64-encoded audio chunks
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(int16.buffer)));
+    // Use chunked encoding to avoid stack overflow with spread operator
+    const bytes = new Uint8Array(int16.buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    const base64 = btoa(binary);
     elWs.send(JSON.stringify({
       user_audio_chunk: base64,
     }));
@@ -396,47 +400,68 @@ function stopMicCapture() {
   if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
 }
 
-// ── Audio Playback (ElevenLabs TTS chunks) ──────────────────────
+// ── Audio Playback (ElevenLabs TTS chunks — raw PCM 16-bit 16kHz) ──
 
 let audioPlaybackQueue = [];
-let isDecodingAudio = false;
+let isPlayingAudio = false;
+let playbackContext = null;
+let nextPlayTime = 0;
+const PLAYBACK_SAMPLE_RATE = 16000;
 
 async function playAudioChunk(base64Audio) {
   audioPlaybackQueue.push(base64Audio);
-  if (!isDecodingAudio) processAudioQueue();
+  if (!isPlayingAudio) processAudioQueue();
 }
 
 async function processAudioQueue() {
   if (audioPlaybackQueue.length === 0) {
-    isDecodingAudio = false;
+    isPlayingAudio = false;
     return;
   }
-  isDecodingAudio = true;
+  isPlayingAudio = true;
 
   const chunk = audioPlaybackQueue.shift();
   try {
-    if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    await audioContext.resume();
+    if (!playbackContext) {
+      playbackContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: PLAYBACK_SAMPLE_RATE });
+    }
+    await playbackContext.resume();
 
-    const bytes = atob(chunk);
-    const buffer = new Uint8Array(bytes.length);
-    for (let i = 0; i < bytes.length; i++) buffer[i] = bytes.charCodeAt(i);
+    // Decode base64 to raw bytes
+    const binaryStr = atob(chunk);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
 
-    const audioBuffer = await audioContext.decodeAudioData(buffer.buffer.slice(0));
-    const source = audioContext.createBufferSource();
+    // ElevenLabs sends PCM 16-bit signed LE — convert to Float32 for Web Audio
+    const int16 = new Int16Array(bytes.buffer);
+    const float32 = new Float32Array(int16.length);
+    for (let i = 0; i < int16.length; i++) {
+      float32[i] = int16[i] / 32768;
+    }
+
+    const audioBuffer = playbackContext.createBuffer(1, float32.length, PLAYBACK_SAMPLE_RATE);
+    audioBuffer.getChannelData(0).set(float32);
+
+    const source = playbackContext.createBufferSource();
     source.buffer = audioBuffer;
-    source.connect(audioContext.destination);
+    source.connect(playbackContext.destination);
     source.onended = () => processAudioQueue();
-    source.start();
+
+    // Schedule seamlessly so chunks don't gap
+    const now = playbackContext.currentTime;
+    if (nextPlayTime < now) nextPlayTime = now;
+    source.start(nextPlayTime);
+    nextPlayTime += audioBuffer.duration;
   } catch (e) {
-    console.warn('Audio decode error, skipping chunk:', e.message);
+    console.warn('Audio playback error:', e.message);
     processAudioQueue();
   }
 }
 
 function stopAudioPlayback() {
   audioPlaybackQueue = [];
-  isDecodingAudio = false;
+  isPlayingAudio = false;
+  nextPlayTime = 0;
 }
 
 // ── UI Helpers ──────────────────────────────────────────────────
