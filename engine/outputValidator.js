@@ -58,6 +58,19 @@ function validateOutput(response, persona, state, _previousFacts) {
     failures.push('exited_too_long');
   }
 
+  // 9. No narration / action descriptions — dialogue only
+  // Catches: *looks up*, (smiles), "pauses mid-setup", "gives him a look", "adjusts her grip"
+  if (/\*[^*]+\*/.test(response)) {
+    failures.push('contains_narration');
+  }
+  if (/\([^)]*(?:looks|glances|smiles|laughs|nods|turns|sighs|pauses|shrugs|adjusts|leans)[^)]*\)/i.test(response)) {
+    failures.push('contains_narration');
+  }
+  // Catch narration without markers: "pauses mid-", "gives him a", "adjusts her", "glances over"
+  if (/\b(pauses?\s+mid|gives?\s+him\s+a|adjusts?\s+her|glances?\s+over|looks?\s+(up|away|at\s+him)|leans?\s+(back|in|forward)|sets?\s+down|picks?\s+up|tucks?\s+her|plays?\s+with\s+her|tilts?\s+her|raises?\s+an?\s+eyebrow|bites?\s+her\s+lip|crosses?\s+her\s+arms)/i.test(response)) {
+    failures.push('contains_narration');
+  }
+
   return { passed: failures.length === 0, failures };
 }
 
@@ -81,6 +94,9 @@ function buildCorrectionNote(failures) {
   }
   if (failures.includes('character_break')) {
     corrections.push("Stay in character. Don't reference AI, simulations, or roleplay.");
+  }
+  if (failures.includes('contains_narration')) {
+    corrections.push("ONLY output spoken dialogue. No actions, no narration, no stage directions. No 'pauses', 'looks up', 'adjusts her grip'. Just say the words you would speak out loud.");
   }
   if (failures.includes('exited_too_long')) {
     corrections.push("You're leaving. One short goodbye line only.");
