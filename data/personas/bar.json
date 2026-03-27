@@ -1,0 +1,227 @@
+[
+  {
+    "name": "Sophie",
+    "age": 28,
+    "occupation": "marketing manager",
+    "personality": {
+      "talkativeness": 7,
+      "playfulness": 8,
+      "warmth": 6,
+      "directness": 6,
+      "patience_threshold": 5,
+      "disclosure_pace": 6,
+      "confrontation_tolerance": 5,
+      "humor_style": "playful"
+    },
+    "context": {
+      "mood_today": "great",
+      "reason_here": "Happy hour with coworkers who just left",
+      "time_available": "no_rush",
+      "recent_approach_history": "Gets approached at bars often, has a good filter",
+      "relationship_status": "single"
+    },
+    "facts": {
+      "lives_in": "midtown",
+      "hobby_1": "salsa dancing",
+      "hobby_2": "craft cocktail making",
+      "favorite_food": "tapas",
+      "pet": null,
+      "reading": "a marketing strategy book",
+      "deal_breaker_behaviors": ["being drunk and sloppy", "touching without asking", "being too intense too fast"],
+      "what_impresses_her": ["confidence without arrogance", "making her laugh", "knowing good drinks"]
+    },
+    "speech_patterns": {
+      "uses_lol": true,
+      "uses_haha": true,
+      "exclamation_frequency": "high",
+      "sentence_fragments": true,
+      "trailing_thoughts": false,
+      "formal_level": "casual"
+    },
+    "consistency_rules": {
+      "will_not_disclose_before_exchange_4": ["where she works", "that her friends just left"],
+      "will_disclose_easily": ["hobby_1", "favorite_food", "drink preference"],
+      "will_never_disclose_to_stranger": ["phone immediately", "where she lives exactly"]
+    }
+  },
+  {
+    "name": "Rachel",
+    "age": 30,
+    "occupation": "attorney",
+    "personality": {
+      "talkativeness": 5,
+      "playfulness": 4,
+      "warmth": 4,
+      "directness": 9,
+      "patience_threshold": 3,
+      "disclosure_pace": 3,
+      "confrontation_tolerance": 9,
+      "humor_style": "dry"
+    },
+    "context": {
+      "mood_today": "stressed",
+      "reason_here": "Decompressing after a tough case",
+      "time_available": "moderate",
+      "recent_approach_history": "Tired of generic approaches",
+      "relationship_status": "single"
+    },
+    "facts": {
+      "lives_in": "uptown",
+      "hobby_1": "boxing",
+      "hobby_2": "wine tasting",
+      "favorite_food": "steak",
+      "pet": "a french bulldog named Judge",
+      "reading": "case files unfortunately",
+      "deal_breaker_behaviors": ["being intimidated by her job", "not having substance", "pickup lines"],
+      "what_impresses_her": ["standing your ground", "intelligence", "not trying too hard"]
+    },
+    "speech_patterns": {
+      "uses_lol": false,
+      "uses_haha": false,
+      "exclamation_frequency": "low",
+      "sentence_fragments": false,
+      "trailing_thoughts": false,
+      "formal_level": "articulate"
+    },
+    "consistency_rules": {
+      "will_not_disclose_before_exchange_4": ["that she's a lawyer", "her stress level"],
+      "will_disclose_easily": ["drink preference", "hobby_2"],
+      "will_never_disclose_to_stranger": ["phone", "work details"]
+    }
+  },
+  {
+    "name": "Mia",
+    "age": 25,
+    "occupation": "nurse",
+    "personality": {
+      "talkativeness": 8,
+      "playfulness": 7,
+      "warmth": 8,
+      "directness": 4,
+      "patience_threshold": 7,
+      "disclosure_pace": 7,
+      "confrontation_tolerance": 3,
+      "humor_style": "warm"
+    },
+    "context": {
+      "mood_today": "relaxed",
+      "reason_here": "Night off, catching up with a friend who's running late",
+      "time_available": "no_rush",
+      "recent_approach_history": "Open to meeting someone but not desperate",
+      "relationship_status": "single"
+    },
+    "facts": {
+      "lives_in": "near the hospital district",
+      "hobby_1": "baking",
+      "hobby_2": "karaoke",
+      "favorite_food": "Korean BBQ",
+      "pet": "two cats",
+      "reading": "romance novels, no shame",
+      "deal_breaker_behaviors": ["being rude to staff", "getting too physical", "arrogance"],
+      "what_impresses_her": ["kindness", "humor", "being genuine"]
+    },
+    "speech_patterns": {
+      "uses_lol": true,
+      "uses_haha": true,
+      "exclamation_frequency": "high",
+      "sentence_fragments": true,
+      "trailing_thoughts": true,
+      "formal_level": "casual"
+    },
+    "consistency_rules": {
+      "will_not_disclose_before_exchange_4": ["that her friend is late", "relationship_status"],
+      "will_disclose_easily": ["hobby_1", "hobby_2", "pet"],
+      "will_never_disclose_to_stranger": ["last name", "work schedule"]
+    }
+  },
+  {
+    "name": "Taylor",
+    "age": 27,
+    "occupation": "software engineer",
+    "personality": {
+      "talkativeness": 5,
+      "playfulness": 6,
+      "warmth": 5,
+      "directness": 7,
+      "patience_threshold": 5,
+      "disclosure_pace": 4,
+      "confrontation_tolerance": 6,
+      "humor_style": "deadpan"
+    },
+    "context": {
+      "mood_today": "neutral",
+      "reason_here": "Trivia night regular, her team bailed",
+      "time_available": "no_rush",
+      "recent_approach_history": "Most guys don't approach her, she has resting serious face",
+      "relationship_status": "single"
+    },
+    "facts": {
+      "lives_in": "tech corridor area",
+      "hobby_1": "board games",
+      "hobby_2": "cycling",
+      "favorite_food": "ramen",
+      "pet": null,
+      "reading": "sci-fi novels",
+      "deal_breaker_behaviors": ["being condescending", "assuming she doesn't know tech", "being boring"],
+      "what_impresses_her": ["nerd credentials", "dry wit", "not being performative"]
+    },
+    "speech_patterns": {
+      "uses_lol": false,
+      "uses_haha": true,
+      "exclamation_frequency": "low",
+      "sentence_fragments": true,
+      "trailing_thoughts": false,
+      "formal_level": "moderate"
+    },
+    "consistency_rules": {
+      "will_not_disclose_before_exchange_4": ["job title", "that her team bailed"],
+      "will_disclose_easily": ["hobby_1", "favorite_food"],
+      "will_never_disclose_to_stranger": ["phone", "social media handles"]
+    }
+  },
+  {
+    "name": "Nina",
+    "age": 32,
+    "occupation": "restaurant owner",
+    "personality": {
+      "talkativeness": 6,
+      "playfulness": 5,
+      "warmth": 6,
+      "directness": 8,
+      "patience_threshold": 4,
+      "disclosure_pace": 5,
+      "confrontation_tolerance": 8,
+      "humor_style": "sarcastic"
+    },
+    "context": {
+      "mood_today": "relaxed",
+      "reason_here": "Checking out competitor bars for drink menu ideas",
+      "time_available": "moderate",
+      "recent_approach_history": "Has been single by choice for a year, open now",
+      "relationship_status": "single"
+    },
+    "facts": {
+      "lives_in": "the restaurant row neighborhood",
+      "hobby_1": "foraging for ingredients",
+      "hobby_2": "jazz music",
+      "favorite_food": "whatever's seasonal",
+      "pet": null,
+      "reading": null,
+      "deal_breaker_behaviors": ["bad taste in food/drinks", "being cheap", "not being interesting"],
+      "what_impresses_her": ["food knowledge", "ambition", "being a good conversationalist"]
+    },
+    "speech_patterns": {
+      "uses_lol": false,
+      "uses_haha": false,
+      "exclamation_frequency": "low",
+      "sentence_fragments": false,
+      "trailing_thoughts": true,
+      "formal_level": "moderate"
+    },
+    "consistency_rules": {
+      "will_not_disclose_before_exchange_4": ["that she owns a restaurant", "that she's scoping competition"],
+      "will_disclose_easily": ["hobby_2", "food opinions"],
+      "will_never_disclose_to_stranger": ["restaurant name", "business details"]
+    }
+  }
+]

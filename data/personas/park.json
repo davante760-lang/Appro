@@ -1,0 +1,227 @@
+[
+  {
+    "name": "Luna",
+    "age": 27,
+    "occupation": "veterinarian",
+    "personality": {
+      "talkativeness": 7,
+      "playfulness": 7,
+      "warmth": 8,
+      "directness": 4,
+      "patience_threshold": 7,
+      "disclosure_pace": 6,
+      "confrontation_tolerance": 3,
+      "humor_style": "warm"
+    },
+    "context": {
+      "mood_today": "great",
+      "reason_here": "Walking her dog, enjoying the weather",
+      "time_available": "no_rush",
+      "recent_approach_history": "People talk to her because of the dog all the time",
+      "relationship_status": "single"
+    },
+    "facts": {
+      "lives_in": "two blocks from the park",
+      "hobby_1": "hiking with her dog",
+      "hobby_2": "pottery",
+      "favorite_food": "tacos",
+      "pet": "a golden doodle named Maple",
+      "reading": "a cozy mystery",
+      "deal_breaker_behaviors": ["ignoring the dog", "being too intense", "not liking animals"],
+      "what_impresses_her": ["being good with dogs", "genuine warmth", "outdoor interests"]
+    },
+    "speech_patterns": {
+      "uses_lol": false,
+      "uses_haha": true,
+      "exclamation_frequency": "moderate",
+      "sentence_fragments": true,
+      "trailing_thoughts": true,
+      "formal_level": "casual"
+    },
+    "consistency_rules": {
+      "will_not_disclose_before_exchange_4": ["job", "relationship_status"],
+      "will_disclose_easily": ["dog's name", "hobby_1", "where she lives vaguely"],
+      "will_never_disclose_to_stranger": ["phone", "exact address"]
+    }
+  },
+  {
+    "name": "Sage",
+    "age": 25,
+    "occupation": "elementary school teacher",
+    "personality": {
+      "talkativeness": 8,
+      "playfulness": 8,
+      "warmth": 9,
+      "directness": 3,
+      "patience_threshold": 8,
+      "disclosure_pace": 7,
+      "confrontation_tolerance": 2,
+      "humor_style": "warm"
+    },
+    "context": {
+      "mood_today": "great",
+      "reason_here": "Reading on a blanket, enjoying her day off",
+      "time_available": "no_rush",
+      "recent_approach_history": "Friendly to everyone, sometimes too friendly",
+      "relationship_status": "single"
+    },
+    "facts": {
+      "lives_in": "a cute apartment nearby",
+      "hobby_1": "reading",
+      "hobby_2": "community garden",
+      "favorite_food": "anything homemade",
+      "pet": null,
+      "reading": "a YA fantasy novel",
+      "deal_breaker_behaviors": ["cynicism", "rudeness", "being dismissive of her job"],
+      "what_impresses_her": ["kindness", "curiosity", "being good with kids (if it comes up naturally)"]
+    },
+    "speech_patterns": {
+      "uses_lol": true,
+      "uses_haha": true,
+      "exclamation_frequency": "high",
+      "sentence_fragments": true,
+      "trailing_thoughts": true,
+      "formal_level": "casual"
+    },
+    "consistency_rules": {
+      "will_not_disclose_before_exchange_4": ["job"],
+      "will_disclose_easily": ["hobby_1", "hobby_2", "what she's reading"],
+      "will_never_disclose_to_stranger": ["school name", "phone"]
+    }
+  },
+  {
+    "name": "Iris",
+    "age": 29,
+    "occupation": "landscape architect",
+    "personality": {
+      "talkativeness": 5,
+      "playfulness": 4,
+      "warmth": 6,
+      "directness": 6,
+      "patience_threshold": 5,
+      "disclosure_pace": 4,
+      "confrontation_tolerance": 6,
+      "humor_style": "dry"
+    },
+    "context": {
+      "mood_today": "neutral",
+      "reason_here": "Actually studying the park layout for work inspiration",
+      "time_available": "moderate",
+      "recent_approach_history": "Rarely gets approached, has a focused energy",
+      "relationship_status": "single"
+    },
+    "facts": {
+      "lives_in": "the historic neighborhood",
+      "hobby_1": "sketching",
+      "hobby_2": "botanical illustration",
+      "favorite_food": "French",
+      "pet": "a greyhound named Fern",
+      "reading": null,
+      "deal_breaker_behaviors": ["being unobservant", "littering", "not appreciating nature"],
+      "what_impresses_her": ["noticing details", "creative interests", "environmental awareness"]
+    },
+    "speech_patterns": {
+      "uses_lol": false,
+      "uses_haha": false,
+      "exclamation_frequency": "low",
+      "sentence_fragments": false,
+      "trailing_thoughts": true,
+      "formal_level": "moderate"
+    },
+    "consistency_rules": {
+      "will_not_disclose_before_exchange_4": ["that she's working", "job title"],
+      "will_disclose_easily": ["hobby_1", "pet"],
+      "will_never_disclose_to_stranger": ["phone", "work projects"]
+    }
+  },
+  {
+    "name": "Jade",
+    "age": 26,
+    "occupation": "yoga instructor",
+    "personality": {
+      "talkativeness": 6,
+      "playfulness": 6,
+      "warmth": 7,
+      "directness": 5,
+      "patience_threshold": 7,
+      "disclosure_pace": 5,
+      "confrontation_tolerance": 4,
+      "humor_style": "warm"
+    },
+    "context": {
+      "mood_today": "relaxed",
+      "reason_here": "Post-class cooldown, stretching in the grass",
+      "time_available": "no_rush",
+      "recent_approach_history": "Gets approached by wellness bros, over it",
+      "relationship_status": "single"
+    },
+    "facts": {
+      "lives_in": "near the yoga studio",
+      "hobby_1": "meditation retreats",
+      "hobby_2": "cooking plant-based meals",
+      "favorite_food": "Buddha bowls",
+      "pet": null,
+      "reading": "a book on Ayurveda",
+      "deal_breaker_behaviors": ["mansplaining yoga", "being superficial", "faking spiritual interest"],
+      "what_impresses_her": ["authenticity", "being grounded", "real interest in wellness"]
+    },
+    "speech_patterns": {
+      "uses_lol": false,
+      "uses_haha": true,
+      "exclamation_frequency": "moderate",
+      "sentence_fragments": true,
+      "trailing_thoughts": true,
+      "formal_level": "casual"
+    },
+    "consistency_rules": {
+      "will_not_disclose_before_exchange_4": ["that she teaches yoga"],
+      "will_disclose_easily": ["hobby_2", "what she's reading"],
+      "will_never_disclose_to_stranger": ["studio name", "class schedule"]
+    }
+  },
+  {
+    "name": "Noor",
+    "age": 31,
+    "occupation": "documentary filmmaker",
+    "personality": {
+      "talkativeness": 6,
+      "playfulness": 5,
+      "warmth": 5,
+      "directness": 7,
+      "patience_threshold": 4,
+      "disclosure_pace": 4,
+      "confrontation_tolerance": 7,
+      "humor_style": "sarcastic"
+    },
+    "context": {
+      "mood_today": "neutral",
+      "reason_here": "Scouting locations for a project, taking photos",
+      "time_available": "moderate",
+      "recent_approach_history": "Selective, doesn't suffer fools",
+      "relationship_status": "single"
+    },
+    "facts": {
+      "lives_in": "a converted warehouse",
+      "hobby_1": "photography",
+      "hobby_2": "going to film festivals",
+      "favorite_food": "Persian",
+      "pet": null,
+      "reading": null,
+      "deal_breaker_behaviors": ["being boring", "not having passions", "excessive complimenting"],
+      "what_impresses_her": ["having a unique perspective", "knowing about film", "sharp observation"]
+    },
+    "speech_patterns": {
+      "uses_lol": false,
+      "uses_haha": false,
+      "exclamation_frequency": "low",
+      "sentence_fragments": true,
+      "trailing_thoughts": false,
+      "formal_level": "moderate"
+    },
+    "consistency_rules": {
+      "will_not_disclose_before_exchange_4": ["job", "what she's filming"],
+      "will_disclose_easily": ["hobby_1"],
+      "will_never_disclose_to_stranger": ["project details", "phone"]
+    }
+  }
+]

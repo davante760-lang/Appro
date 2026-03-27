@@ -1,0 +1,19 @@
+{
+  "name": "approach-web",
+  "version": "1.0.0",
+  "description": "APPROACH — AI-powered social conversation practice",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "seed": "node scripts/seed-personas.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "dotenv": "^16.4.0",
+    "express": "^4.21.0",
+    "pg": "^8.13.0",
+    "uuid": "^9.0.0",
+    "ws": "^8.18.0"
+  }
+}

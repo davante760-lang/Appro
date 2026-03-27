@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>APPROACH</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+
+    <!-- ═══ HOME SCREEN ═══ -->
+    <main id="view-home" class="view active">
+      <div class="home-container">
+        <header class="home-header">
+          <h1 class="logo">APPROACH</h1>
+          <p class="tagline">Practice real conversations. Build real confidence.</p>
+        </header>
+
+        <section class="scenario-section">
+          <h2 class="section-title">Choose a Scenario</h2>
+          <div id="scenario-grid" class="scenario-grid"></div>
+        </section>
+
+        <section class="difficulty-section">
+          <h2 class="section-title">Difficulty</h2>
+          <div class="difficulty-chips">
+            <button class="difficulty-chip" data-difficulty="warm">
+              <span class="chip-dot warm"></span> Warm
+            </button>
+            <button class="difficulty-chip" data-difficulty="neutral">
+              <span class="chip-dot neutral"></span> Neutral
+            </button>
+            <button class="difficulty-chip" data-difficulty="guarded">
+              <span class="chip-dot guarded"></span> Guarded
+            </button>
+          </div>
+        </section>
+
+        <button id="start-btn" class="start-btn" disabled>Start Session</button>
+
+        <section class="history-section">
+          <h2 class="section-title">Recent Sessions</h2>
+          <div id="history-list" class="history-list">
+            <p class="empty-state">No sessions yet. Start your first one above.</p>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- ═══ VOICE CHAT SCREEN ═══ -->
+    <main id="view-chat" class="view">
+      <header class="chat-header">
+        <button id="end-session-btn" class="end-btn">End Session</button>
+        <div class="chat-header-center">
+          <span id="chat-scenario-emoji" class="scenario-emoji"></span>
+          <span id="chat-scenario-name" class="scenario-name"></span>
+        </div>
+        <div id="state-badge" class="state-badge">NEUTRAL</div>
+      </header>
+
+      <div class="voice-body">
+        <!-- Scene setter -->
+        <div id="scene-setter" class="scene-setter"></div>
+
+        <!-- Voice state indicator -->
+        <div id="voice-status" class="voice-status">
+          <span id="voice-status-text">Tap mic to start</span>
+        </div>
+
+        <!-- Her last response (stays visible) -->
+        <div id="her-response-area" class="her-response-area hidden">
+          <div class="her-label">HER</div>
+          <div id="her-response-text" class="her-response-text"></div>
+        </div>
+
+        <!-- Live transcript (what you're saying) -->
+        <div id="live-transcript" class="live-transcript hidden">
+          <div class="transcript-label">YOU</div>
+          <div id="transcript-text" class="transcript-text"></div>
+        </div>
+
+        <!-- Coach suggestions (what to say next) -->
+        <div id="coach-panel" class="coach-panel hidden">
+          <div class="coach-header">
+            <span class="coach-icon">&#x1F3AF;</span>
+            <span id="coach-note" class="coach-note"></span>
+          </div>
+          <div id="suggestions-list" class="suggestions-list"></div>
+        </div>
+
+        <!-- Suggested openers (first turn only) -->
+        <div id="openers-panel" class="openers-panel">
+          <p class="openers-label">Suggested openers — try saying one of these</p>
+          <div id="openers-list" class="openers-list"></div>
+        </div>
+      </div>
+
+      <!-- Mic button + text fallback -->
+      <div class="voice-controls">
+        <div class="text-fallback">
+          <input type="text" id="chat-input" placeholder="Or type here..." autocomplete="off">
+          <button id="send-btn" class="send-btn-small">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>
+          </button>
+        </div>
+        <button id="mic-btn" class="mic-btn" aria-label="Hold to speak">
+          <svg id="mic-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+          <div id="mic-pulse" class="mic-pulse hidden"></div>
+        </button>
+      </div>
+    </main>
+
+    <!-- ═══ FEEDBACK SCREEN ═══ -->
+    <main id="view-feedback" class="view">
+      <div class="feedback-container">
+        <header class="feedback-header">
+          <h1 class="feedback-title">Session Debrief</h1>
+          <p id="feedback-scenario" class="feedback-scenario"></p>
+        </header>
+
+        <!-- State Timeline -->
+        <section class="timeline-section">
+          <h3 class="section-label">State Progression</h3>
+          <div id="state-timeline" class="state-timeline"></div>
+        </section>
+
+        <!-- Score Cards -->
+        <section class="scores-section">
+          <h3 class="section-label">Scores</h3>
+          <div id="score-cards" class="score-cards"></div>
+        </section>
+
+        <!-- What Worked / Improve -->
+        <section class="insight-section">
+          <div class="insight-card worked">
+            <h3>What Worked</h3>
+            <p id="what-worked"></p>
+          </div>
+          <div class="insight-card improve">
+            <h3>What to Improve</h3>
+            <p id="what-to-improve"></p>
+          </div>
+        </section>
+
+        <!-- Suggested Line -->
+        <section id="suggested-line-section" class="suggested-line-section">
+          <h3 class="section-label">What You Could Have Said</h3>
+          <blockquote id="suggested-line" class="suggested-line"></blockquote>
+        </section>
+
+        <!-- Turn by Turn -->
+        <section class="turns-section">
+          <h3 class="section-label">Turn-by-Turn</h3>
+          <div id="turn-list" class="turn-list"></div>
+        </section>
+
+        <!-- Actions -->
+        <div class="feedback-actions">
+          <button id="practice-again-btn" class="start-btn">Practice Again</button>
+          <button id="back-home-btn" class="secondary-btn">Back to Scenarios</button>
+        </div>
+      </div>
+    </main>
+
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

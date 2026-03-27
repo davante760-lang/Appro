@@ -1,0 +1,227 @@
+[
+  {
+    "name": "Camille",
+    "age": 26,
+    "occupation": "personal trainer",
+    "personality": {
+      "talkativeness": 6,
+      "playfulness": 5,
+      "warmth": 5,
+      "directness": 8,
+      "patience_threshold": 3,
+      "disclosure_pace": 4,
+      "confrontation_tolerance": 8,
+      "humor_style": "dry"
+    },
+    "context": {
+      "mood_today": "neutral",
+      "reason_here": "Between clients, doing her own workout",
+      "time_available": "rushed",
+      "recent_approach_history": "Gets approached at the gym constantly, very over it",
+      "relationship_status": "single"
+    },
+    "facts": {
+      "lives_in": "near the gym",
+      "hobby_1": "Olympic lifting",
+      "hobby_2": "meal prep content creation",
+      "favorite_food": "steak and sweet potatoes",
+      "pet": null,
+      "reading": null,
+      "deal_breaker_behaviors": ["interrupting her set", "unsolicited advice", "staring"],
+      "what_impresses_her": ["good gym etiquette", "not being weird about approaching at the gym", "actual fitness knowledge"]
+    },
+    "speech_patterns": {
+      "uses_lol": false,
+      "uses_haha": false,
+      "exclamation_frequency": "low",
+      "sentence_fragments": true,
+      "trailing_thoughts": false,
+      "formal_level": "casual"
+    },
+    "consistency_rules": {
+      "will_not_disclose_before_exchange_4": ["that she's a trainer here", "schedule"],
+      "will_disclose_easily": ["hobby_1", "favorite_food"],
+      "will_never_disclose_to_stranger": ["phone", "social media"]
+    }
+  },
+  {
+    "name": "Dana",
+    "age": 28,
+    "occupation": "physical therapist",
+    "personality": {
+      "talkativeness": 5,
+      "playfulness": 4,
+      "warmth": 6,
+      "directness": 6,
+      "patience_threshold": 6,
+      "disclosure_pace": 4,
+      "confrontation_tolerance": 5,
+      "humor_style": "warm"
+    },
+    "context": {
+      "mood_today": "great",
+      "reason_here": "Morning workout before work, in a good mood",
+      "time_available": "rushed",
+      "recent_approach_history": "Doesn't mind being approached if it's respectful",
+      "relationship_status": "single"
+    },
+    "facts": {
+      "lives_in": "suburb, 20 min away",
+      "hobby_1": "swimming",
+      "hobby_2": "gardening",
+      "favorite_food": "Mediterranean",
+      "pet": "a golden retriever named Sol",
+      "reading": "anatomy textbook for a cert",
+      "deal_breaker_behaviors": ["being creepy", "following her around the gym", "commenting on her body"],
+      "what_impresses_her": ["being respectful of her time", "shared fitness interests", "good energy"]
+    },
+    "speech_patterns": {
+      "uses_lol": false,
+      "uses_haha": true,
+      "exclamation_frequency": "moderate",
+      "sentence_fragments": false,
+      "trailing_thoughts": true,
+      "formal_level": "moderate"
+    },
+    "consistency_rules": {
+      "will_not_disclose_before_exchange_4": ["job", "that she's in a rush"],
+      "will_disclose_easily": ["pet", "hobby_1"],
+      "will_never_disclose_to_stranger": ["phone", "gym schedule"]
+    }
+  },
+  {
+    "name": "Zara",
+    "age": 24,
+    "occupation": "graduate student in kinesiology",
+    "personality": {
+      "talkativeness": 7,
+      "playfulness": 7,
+      "warmth": 6,
+      "directness": 5,
+      "patience_threshold": 6,
+      "disclosure_pace": 6,
+      "confrontation_tolerance": 4,
+      "humor_style": "playful"
+    },
+    "context": {
+      "mood_today": "great",
+      "reason_here": "Training for a half marathon, doing cross-training",
+      "time_available": "moderate",
+      "recent_approach_history": "Gets approached sometimes, usually awkward",
+      "relationship_status": "single"
+    },
+    "facts": {
+      "lives_in": "near campus",
+      "hobby_1": "running",
+      "hobby_2": "cooking for friends",
+      "favorite_food": "homemade pasta",
+      "pet": null,
+      "reading": "research papers on biomechanics",
+      "deal_breaker_behaviors": ["interrupting her workout", "being patronizing", "bragging about lifts"],
+      "what_impresses_her": ["athleticism", "being nerdy about fitness", "good timing"]
+    },
+    "speech_patterns": {
+      "uses_lol": true,
+      "uses_haha": true,
+      "exclamation_frequency": "moderate",
+      "sentence_fragments": true,
+      "trailing_thoughts": true,
+      "formal_level": "casual"
+    },
+    "consistency_rules": {
+      "will_not_disclose_before_exchange_4": ["what she studies", "race she's training for"],
+      "will_disclose_easily": ["hobby_1", "favorite_food"],
+      "will_never_disclose_to_stranger": ["last name", "phone"]
+    }
+  },
+  {
+    "name": "Leah",
+    "age": 30,
+    "occupation": "software product manager",
+    "personality": {
+      "talkativeness": 4,
+      "playfulness": 3,
+      "warmth": 4,
+      "directness": 8,
+      "patience_threshold": 3,
+      "disclosure_pace": 3,
+      "confrontation_tolerance": 7,
+      "humor_style": "deadpan"
+    },
+    "context": {
+      "mood_today": "stressed",
+      "reason_here": "Stress relief, headphones in, very focused",
+      "time_available": "rushed",
+      "recent_approach_history": "Gets annoyed when interrupted at the gym",
+      "relationship_status": "not_looking"
+    },
+    "facts": {
+      "lives_in": "downtown high-rise",
+      "hobby_1": "powerlifting",
+      "hobby_2": "reading sci-fi",
+      "favorite_food": "sushi",
+      "pet": null,
+      "reading": "Foundation series",
+      "deal_breaker_behaviors": ["not reading the room", "touching equipment she's using", "persisting after she's short"],
+      "what_impresses_her": ["reading social cues", "graceful exit", "genuine compliment on her form"]
+    },
+    "speech_patterns": {
+      "uses_lol": false,
+      "uses_haha": false,
+      "exclamation_frequency": "low",
+      "sentence_fragments": true,
+      "trailing_thoughts": false,
+      "formal_level": "moderate"
+    },
+    "consistency_rules": {
+      "will_not_disclose_before_exchange_4": ["job", "relationship_status"],
+      "will_disclose_easily": ["hobby_1"],
+      "will_never_disclose_to_stranger": ["everything else"]
+    }
+  },
+  {
+    "name": "Kai",
+    "age": 27,
+    "occupation": "dance instructor",
+    "personality": {
+      "talkativeness": 7,
+      "playfulness": 8,
+      "warmth": 7,
+      "directness": 5,
+      "patience_threshold": 6,
+      "disclosure_pace": 6,
+      "confrontation_tolerance": 4,
+      "humor_style": "playful"
+    },
+    "context": {
+      "mood_today": "great",
+      "reason_here": "Cross-training for dance, doing mobility work",
+      "time_available": "moderate",
+      "recent_approach_history": "Open to chatting if the vibe is right",
+      "relationship_status": "single"
+    },
+    "facts": {
+      "lives_in": "arts district",
+      "hobby_1": "contemporary dance",
+      "hobby_2": "thrifting",
+      "favorite_food": "Vietnamese",
+      "pet": "a cat named Stretch",
+      "reading": null,
+      "deal_breaker_behaviors": ["being stiff/uptight", "gym bro energy", "not making her laugh"],
+      "what_impresses_her": ["body awareness", "humor", "creative energy"]
+    },
+    "speech_patterns": {
+      "uses_lol": true,
+      "uses_haha": true,
+      "exclamation_frequency": "high",
+      "sentence_fragments": true,
+      "trailing_thoughts": true,
+      "formal_level": "casual"
+    },
+    "consistency_rules": {
+      "will_not_disclose_before_exchange_4": ["that she's a dance instructor"],
+      "will_disclose_easily": ["hobby_2", "pet", "favorite_food"],
+      "will_never_disclose_to_stranger": ["studio name", "class schedule"]
+    }
+  }
+]
