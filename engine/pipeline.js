@@ -48,6 +48,16 @@ async function generatePersonaResponse(anthropic, persona, state, latentVars, me
 async function runPipeline(userMessage, messages, engineState, persona, scenario, difficulty, _userSafetyFlags) {
   const anthropic = getClient();
 
+  console.log('[Pipeline] Running:', {
+    exchange: engineState.exchangeNumber,
+    state: engineState.currentState,
+    msgCount: messages.length,
+    hasLatentVars: !!engineState.latentVars,
+    hasPersona: !!persona,
+    scenario: scenario?.id,
+    difficulty,
+  });
+
   // 1. Generate Persona Response — the ONE Claude call
   const updatedMessages = [
     ...messages,
@@ -62,9 +72,9 @@ async function runPipeline(userMessage, messages, engineState, persona, scenario
         updatedMessages, scenario, engineState.exchangeNumber
       );
     } catch (err) {
-      console.error('[Pipeline] Persona response failed:', err.message);
-      // Fallback — keep the conversation going
-      herResponse = "Sorry, what was that?";
+      console.error('[Pipeline] Persona response failed:', err.message, err.stack);
+      // Temporarily expose error for debugging — remove later
+      herResponse = "DEBUG: " + err.message;
     }
   }
 
